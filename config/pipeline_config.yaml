@@ -1,0 +1,55 @@
+# SageMaker MLOps Pipeline Configuration
+# Adjust parameters per environment (dev, staging, prod).
+
+sagemaker:
+  region: us-east-1
+  role_arn: arn:aws:iam::123456789012:role/SageMakerExecutionRole
+  default_bucket: sagemaker-mlops-dev-data
+  pipeline_name: ml-training-pipeline
+  model_package_group: sagemaker-mlops-models
+
+training:
+  algorithm: gradient_boosting
+  instance_type: ml.m5.xlarge
+  instance_count: 1
+  volume_size_gb: 30
+  max_runtime_seconds: 3600
+  use_spot_instances: true
+  max_wait_seconds: 7200
+  default_hyperparameters:
+    n_estimators: "200"
+    max_depth: "5"
+    learning_rate: "0.1"
+    min_samples_split: "5"
+    subsample: "0.8"
+
+endpoint:
+  endpoint_name: ml-prediction-endpoint
+  instance_type: ml.m5.large
+  initial_instance_count: 1
+  auto_scaling_min: 1
+  auto_scaling_max: 4
+  auto_scaling_target_invocations: 100
+
+ab_testing:
+  enabled: true
+  challenger_traffic_percent: 10
+  evaluation_period_hours: 24
+  min_sample_size: 1000
+  primary_metric: f1
+  min_improvement: 0.02
+
+step_functions:
+  state_machine_name: ml-pipeline-orchestrator
+  notification_topic_arn: arn:aws:sns:us-east-1:123456789012:ml-pipeline-notifications
+  max_retry_attempts: 2
+  retry_interval_seconds: 30
+  retry_backoff_rate: 2.0
+
+quality_gate:
+  min_accuracy: 0.80
+  min_precision: 0.75
+  min_recall: 0.75
+  min_f1: 0.78
+  min_auc: 0.80
+  max_model_size_mb: 200.0

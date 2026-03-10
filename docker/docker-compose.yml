@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  # LocalStack for simulating AWS services during development
+  localstack:
+    image: localstack/localstack:3.1
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,stepfunctions,sns,sqs,cloudwatch,iam
+      - DEFAULT_REGION=us-east-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ML Pipeline Processing/Training container
+  ml-pipeline:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - PIPELINE_CONFIG_PATH=/opt/ml/code/config/pipeline_config.yaml
+    volumes:
+      - ml_data:/opt/ml/data
+      - ml_models:/opt/ml/model
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+volumes:
+  localstack_data:
+  ml_data:
+  ml_models:

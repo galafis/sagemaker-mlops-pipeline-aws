@@ -1,0 +1,136 @@
+{
+  "Comment": "SageMaker MLOps Pipeline - Standalone definition for AWS Step Functions",
+  "StartAt": "PreprocessData",
+  "States": {
+    "PreprocessData": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sagemaker:createProcessingJob.sync",
+      "Parameters": {
+        "ProcessingJobName.$": "States.Format('preprocess-{}', $$.Execution.Name)",
+        "RoleArn": "${SAGEMAKER_ROLE_ARN}",
+        "ProcessingResources": {
+          "ClusterConfig": {
+            "InstanceCount": 1,
+            "InstanceType": "ml.m5.xlarge",
+            "VolumeSizeInGB": 30
+          }
+        },
+        "AppSpecification": {
+          "ImageUri": "${ECR_IMAGE_URI}/ml-processing:latest"
+        }
+      },
+      "ResultPath": "$.PreprocessResult",
+      "Next": "TrainModel",
+      "Retry": [
+        {
+          "ErrorEquals": ["SageMaker.AmazonSageMakerException"],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ]
+    },
+    "TrainModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+      "Parameters": {
+        "TrainingJobName.$": "States.Format('train-{}', $$.Execution.Name)",
+        "RoleArn": "${SAGEMAKER_ROLE_ARN}",
+        "AlgorithmSpecification": {
+          "TrainingImage": "${ECR_IMAGE_URI}/ml-training:latest",
+          "TrainingInputMode": "File"
+        },
+        "ResourceConfig": {
+          "InstanceCount": 1,
+          "InstanceType": "ml.m5.xlarge",
+          "VolumeSizeInGB": 30
+        },
+        "EnableManagedSpotTraining": true,
+        "StoppingCondition": {
+          "MaxRuntimeInSeconds": 3600,
+          "MaxWaitTimeInSeconds": 7200
+        }
+      },
+      "ResultPath": "$.TrainResult",
+      "Next": "EvaluateModel",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ]
+    },
+    "EvaluateModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sagemaker:createProcessingJob.sync",
+      "Parameters": {
+        "ProcessingJobName.$": "States.Format('evaluate-{}', $$.Execution.Name)"
+      },
+      "ResultPath": "$.EvaluateResult",
+      "Next": "CheckQualityGate",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ]
+    },
+    "CheckQualityGate": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.EvaluateResult.Metrics.f1",
+          "NumericGreaterThanEquals": 0.78,
+          "Next": "RegisterModel"
+        }
+      ],
+      "Default": "NotifyFailure"
+    },
+    "RegisterModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sagemaker:createModelPackage",
+      "Parameters": {
+        "ModelPackageGroupName": "sagemaker-mlops-models",
+        "ModelApprovalStatus": "PendingManualApproval"
+      },
+      "ResultPath": "$.RegisterResult",
+      "Next": "NotifySuccess",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ]
+    },
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${SNS_TOPIC_ARN}",
+        "Subject": "ML Pipeline Succeeded",
+        "Message.$": "States.JsonToString($)"
+      },
+      "End": true
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${SNS_TOPIC_ARN}",
+        "Subject": "ML Pipeline Failed",
+        "Message.$": "States.JsonToString($)"
+      },
+      "End": true
+    }
+  }
+}
