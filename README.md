@@ -6,6 +6,7 @@
 ![Step Functions](https://img.shields.io/badge/Step_Functions-Orchestration-FF4F8B?style=for-the-badge&logo=amazonaws&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI/CD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker)](Dockerfile)
 
 # sagemaker-mlops-pipeline-aws
 
